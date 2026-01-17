@@ -1,0 +1,200 @@
+Project: AI/Human Prompts Classifier
+
+Code:
+
+######################
+
+from google.colab import files
+uploaded = files.upload() 
+file_path = list(uploaded.keys())[0]
+
+import pandas as pd
+import random
+import math
+
+
+df = pd.read_csv("1-balanced_ai_human_prompts.csv")
+text_col_name = 'text'
+label_col_name = 'generated'
+
+
+############################################################
+# Problem 1a: feature extraction
+
+def wordExt(text):
+    word_counts = {}
+    current_word = ""
+    for char in str(text):
+        if char in [' ', '\t', '\n']:
+            if current_word != "":
+                word_counts[current_word] = word_counts.get(current_word, 0) + 1
+                current_word = ""
+        else:
+            current_word = current_word + char
+    if current_word != "":
+        word_counts[current_word] = word_counts.get(current_word, 0) + 1
+    return word_counts
+
+
+def normalize_label(v):
+    try:
+        return 1 if int(v) == 1 else -1
+    except:
+        s = str(v).strip().lower()
+        return 1 if s in ('1', 'human', 'true', 't', 'yes', 'y') else -1
+
+
+dataset = [(wordExt(row[text_col_name]), normalize_label(row[label_col_name])) for _, row in df.iterrows()]
+
+
+
+############################################################
+# Problem 1b: divide the dataset into training and test sets 
+
+def split(data, train_ratio=0.8):
+    data_copy = data.copy()
+    random.shuffle(data_copy)
+    split_index = int(len(data_copy) * train_ratio)
+    train = data_copy[:split_index]
+    test = data_copy[split_index:]
+    return train, test
+
+
+
+dTrain, dTest = split(dataset)
+
+
+print(f"Training set: {len(dTrain)}")
+print(f"Test set: {len(dTest)}")
+
+train_labels = [y for _, y in dTrain]
+test_labels = [y for _, y in dTest]
+print("Train label distribution:", {1: train_labels.count(1), -1: train_labels.count(-1)})
+print("Test label distribution:", {1: test_labels.count(1), -1: test_labels.count(-1)})
+
+
+
+############################################################
+# Problem 1c: Predictor using stochastic gradient descent and hinge loss
+
+def predictor(eTrain, iterate, stepSize):
+    weights = {}
+    bias = 0.0
+    for _ in range(iterate):
+        for x, y in eTrain:
+            score = sum(weights.get(f, 0.0) * v for f, v in x.items()) + bias
+            loss = max(0.0, 1.0 - y * score)
+            if loss > 0.0:
+                for f, v in x.items():
+                    weights[f] = weights.get(f, 0.0) + stepSize * y * v
+                bias += stepSize * y
+    return weights, bias
+
+def predict(weights, bias, x):
+    s = sum(weights.get(f, 0.0) * v for f, v in x.items()) + bias
+    return 1 if s >= 0 else -1
+
+
+############################################################
+# Problem 1d: evaluate predictor 
+
+def evaluate(weights, bias, data):
+    correct = 0
+    for x, y in data:
+        if predict(weights, bias, x) == y:
+            correct += 1
+    return correct / len(data)
+
+
+
+weights, bias = predictor(dTrain, iterate=3, stepSize=0.001)
+train_acc = evaluate(weights, bias, dTrain)
+test_acc = evaluate(weights, bias, dTest)
+
+print("\n========== BINARY CLASSIFIER RESULTS ==========")
+print("Bias:", bias)
+print("Sample weights (first 20):", dict(list(weights.items())[:20]))
+print(f"Training Accuracy: {train_acc*100:.2f}%")
+print(f"Test Accuracy: {test_acc*100:.2f}%")
+
+
+############################################################
+
+
+############################################################
+# Problem 2: nearest neighbor classification
+############################################################
+
+############################################################
+# Problem 2a: feature extraction already done in Problem 1a
+# Problem 2b: divide the dataset into training and test sets already done in Problem 1b
+############################################################
+Problem 2c: find the distance of each test tuple from each training example and return minimum distance training for each test tuple
+
+import math
+
+def eucDist(x1, x2):
+    dist = 0.0
+    allKeys = set(x1.keys()) | set(x2.keys())
+    for f in allKeys:
+        v1 = x1.get(f, 0.0)
+        v2 = x2.get(f, 0.0)
+        dist = dist + (v1 - v2) ** 2
+    return math.sqrt(dist)
+        
+
+############################################################
+Problem 2d: Classify test tuple 	# classify the test tuple as per closest training example
+
+def nnPredict(train, x):
+    bestDist = float('inf')
+    bestLabel = None
+    for xi, yi in train:
+        d = eucDist(x, xi)
+        if d < bestDist:
+            bestDist = d
+            bestLabel = yi
+    return bestLabel
+
+def nnEvaluate(train, test):
+    correct = 0
+    for x, y in test:
+        if nnPredict(train, x) == y:
+            correct = correct + 1
+    return correct / len(test)
+
+nn_acc = nnEvaluate(dTrain, dTest)
+print(f"Nearest Neighbour Test Accuracy (Euclidean): {nn_acc*100:.2f}%")
+
+############################################################
+# Problem 3: compare classifiers
+
+
+
+def compare():
+    
+    
+    
+    print(f"SGD Classifier - Training Accuracy: {train_acc*100:.2f}%")
+    print(f"SGD Classifier - Test Accuracy: {test_acc*100:.2f}%")
+    
+    
+    print(f"Nearest Neighbor Classifier - Test Accuracy: {nn_acc*100:.2f}%")
+    
+    
+    if test_acc > nn_acc:
+        print("=> SGD Classifier performs better on the test data.")
+    elif nn_acc > test_acc:
+        print("Nearest Neighbor performs better on the test data.")
+    else:
+        print("Both classifiers perform equally well on the test data.")
+    
+    
+
+
+compare()
+
+##########################################################
+
+
+
